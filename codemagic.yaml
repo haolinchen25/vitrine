@@ -1,0 +1,51 @@
+workflows:
+  build-vitrine:
+    name: Build Vitrine Unsigned IPA
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+
+    inputs:
+      spotify_ipa_url:
+        description: "Direct URL to your decrypted Spotify IPA"
+        required: true
+
+    environment:
+      vars:
+        THEOS: /Users/builder/theos
+
+    scripts:
+      - name: Install dependencies & tools
+        script: |
+          set -e
+          brew install make ldid dpkg zsign uv
+          # Install cyan injector tool
+          uv tool install "cyan @ git+https://github.com/asdfzxcvbn/pyzule-rw"
+          echo "$HOME/.local/bin" >> $CM_ENV || export PATH="$HOME/.local/bin:$PATH"
+
+      - name: Setup Theos & modern iOS SDKs
+        script: |
+          set -e
+          git clone --recursive https://github.com/theos/theos.git $THEOS
+          git clone --depth 1 https://github.com/theos/sdks.git $THEOS/sdks
+
+      - name: Download user-provided Spotify IPA
+        script: |
+          set -e
+          mkdir -p ipa
+          echo "Fetching IPA from user input..."
+          curl -L "${{ inputs.spotify_ipa_url }}" -o ipa/spotify.ipa
+
+          # Check that a valid file was downloaded
+          if [ ! -s ipa/spotify.ipa ]; then
+            echo "Downloaded IPA is empty. Check your URL."
+            exit 1
+          fi
+
+      - name: Build Vitrine IPA
+        script: |
+          set -e
+          export PATH="$HOME/.local/bin:$PATH"
+          make release
+
+    artifacts:
+      - out/*.ipa
